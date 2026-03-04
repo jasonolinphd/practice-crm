@@ -28,11 +28,13 @@
     --stage-reportcomplete: #3d8c6f;
     --stage-declined: #999;
 
-    --eval-faa: #c0522a;
+    --eval-faaadhd: #c0522a;
+    --eval-faa: #e07820;
     --eval-lsat: #2a6fc0;
     --eval-mcat: #2a9fc0;
+    --eval-accommodations: #7a5a9a;
     --eval-therapy: #7a9a3a;
-    --eval-other: #7a5a9a;
+    --eval-other: #888;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -468,11 +470,13 @@
   .stage-declined { background: #f0f0f0; color: #666; border: 1px solid #ddd; }
 
   /* EVAL COLORS */
-  .eval-faa { background: #fdf0ea; color: #8a3010; border: 1px solid #e8c0a0; }
+  .eval-faaadhd { background: #fdf0ea; color: #8a3010; border: 1px solid #e8c0a0; }
+  .eval-faa { background: #fef4e8; color: #7a4010; border: 1px solid #f0d0a0; }
   .eval-lsat { background: #eaf0fd; color: #10308a; border: 1px solid #a0b8e8; }
   .eval-mcat { background: #eaf7fd; color: #10608a; border: 1px solid #a0cce8; }
+  .eval-accommodations { background: #f2eaf7; color: #50207a; border: 1px solid #c8a8e0; }
   .eval-therapy { background: #f2f7ea; color: #40600a; border: 1px solid #b8d4a0; }
-  .eval-other { background: #f2eaf7; color: #50207a; border: 1px solid #c8a8e0; }
+  .eval-other { background: #f0f0f0; color: #555; border: 1px solid #ddd; }
 
   /* BULK SELECT */
   .bulk-bar {
@@ -631,6 +635,13 @@
 
     <div class="sidebar-section">
       <div class="sidebar-label">Eval Type</div>
+      <div class="sidebar-item" onclick="filterByEval('faaadhd', this)">
+        <div class="sidebar-item-label">
+          <div class="sidebar-dot" style="background:var(--eval-faaadhd)"></div>
+          FAA ADHD Fast Track
+        </div>
+        <span class="sidebar-count" id="count-faaadhd">0</span>
+      </div>
       <div class="sidebar-item" onclick="filterByEval('faa', this)">
         <div class="sidebar-item-label">
           <div class="sidebar-dot" style="background:var(--eval-faa)"></div>
@@ -651,6 +662,13 @@
           MCAT
         </div>
         <span class="sidebar-count" id="count-mcat">0</span>
+      </div>
+      <div class="sidebar-item" onclick="filterByEval('accommodations', this)">
+        <div class="sidebar-item-label">
+          <div class="sidebar-dot" style="background:var(--eval-accommodations)"></div>
+          Accommodations
+        </div>
+        <span class="sidebar-count" id="count-accommodations">0</span>
       </div>
       <div class="sidebar-item" onclick="filterByEval('therapy', this)">
         <div class="sidebar-item-label">
@@ -776,9 +794,11 @@
         <div class="form-group">
           <label class="form-label">Eval Type</label>
           <select class="form-select" id="fEval">
+            <option value="faaadhd">FAA ADHD Fast Track</option>
             <option value="faa">FAA / HIMS</option>
             <option value="lsat">LSAT</option>
             <option value="mcat">MCAT</option>
+            <option value="accommodations">Accommodations</option>
             <option value="therapy">Therapy</option>
             <option value="other">Other</option>
           </select>
@@ -857,8 +877,9 @@ const STAGE_LABELS = {
   declined: 'Declined / Dropped'
 };
 const EVAL_LABELS = {
-  faa: 'FAA/HIMS', lsat: 'LSAT', mcat: 'MCAT',
-  therapy: 'Therapy', other: 'Other'
+  faaadhd: 'FAA ADHD Fast Track', faa: 'FAA/HIMS',
+  lsat: 'LSAT', mcat: 'MCAT',
+  accommodations: 'Accommodations', therapy: 'Therapy', other: 'Other'
 };
 
 function initials(c) {
@@ -936,7 +957,7 @@ function updateCounts() {
   ['inquiry','intake','awaiting','evalscheduled','sp','deposit','evalcomplete','reportcomplete','declined'].forEach(s => {
     document.getElementById('count-'+s).textContent = contacts.filter(c=>c.stage===s).length;
   });
-  ['faa','lsat','mcat','therapy','other'].forEach(e => {
+  ['faaadhd','faa','lsat','mcat','accommodations','therapy','other'].forEach(e => {
     document.getElementById('count-'+e).textContent = contacts.filter(c=>c.eval===e).length;
   });
 }
@@ -1124,6 +1145,54 @@ function exportData() {
   a.click();
 }
 
+// ─── EVAL CLASSIFIER ─────────────────────────────────────────────────────────
+function classifyEval(text) {
+  if (!text) return 'other';
+  const t = text.toLowerCase();
+
+  // FAA ADHD Fast Track — must check before general FAA
+  if (t.includes('fast track') || t.includes('fasttrack') ||
+      (t.includes('adhd') && (t.includes('faa') || t.includes('pilot') || t.includes('aviation') || t.includes('medical')))) {
+    return 'faaadhd';
+  }
+
+  // FAA / HIMS
+  if (t.includes('faa') || t.includes('hims') || t.includes('ame') ||
+      t.includes('first class medical') || t.includes('second class medical') ||
+      t.includes('third class medical') || t.includes('1st class medical') ||
+      t.includes('2nd class medical') || t.includes('3rd class medical') ||
+      t.includes('pilot') || t.includes('aviation') || t.includes('airman')) {
+    return 'faa';
+  }
+
+  // LSAT
+  if (t.includes('lsat')) return 'lsat';
+
+  // MCAT
+  if (t.includes('mcat')) return 'mcat';
+
+  // Accommodations — bar, licensing, university, testing boards
+  if (t.includes('accommodation') || t.includes('bar exam') ||
+      t.includes('licensing exam') || t.includes('university') ||
+      t.includes('testing accommodation') || t.includes('lsac') ||
+      t.includes('nbme') || t.includes('usmle') || t.includes('gre') ||
+      t.includes('sat ') || t.includes('act ') || t.includes('act/') ||
+      t.includes('disability') || t.includes('extended time')) {
+    return 'accommodations';
+  }
+
+  // Therapy
+  if (t.includes('therapy') || t.includes('therapist') ||
+      t.includes('counseling') || t.includes('counselor') ||
+      t.includes('anxiety') || t.includes('depression') ||
+      t.includes('stress') || t.includes('trauma') || t.includes('ptsd') ||
+      t.includes('mental health')) {
+    return 'therapy';
+  }
+
+  return 'other';
+}
+
 // ─── GOOGLE CALENDAR SYNC ─────────────────────────────────────────────────────
 const GCAL_CLIENT_ID = '53225490829-8fh0phgirplq1s54nhr13j5gi8kfeadm.apps.googleusercontent.com';
 const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
@@ -1235,13 +1304,8 @@ function extractContactsFromEvents(events) {
     const reasonMatch = desc.match(/reason for consultation[:\s]+([^\n<]+)/i);
     if (reasonMatch) reason = reasonMatch[1].trim();
 
-    // Map reason to eval type
-    let evalType = 'other';
-    const reasonLower = reason.toLowerCase();
-    if (reasonLower.includes('faa') || reasonLower.includes('hims') || reasonLower.includes('pilot') || reasonLower.includes('aviation')) evalType = 'faa';
-    else if (reasonLower.includes('lsat')) evalType = 'lsat';
-    else if (reasonLower.includes('mcat')) evalType = 'mcat';
-    else if (reasonLower.includes('therapy') || reasonLower.includes('counseling')) evalType = 'therapy';
+    // Smart classify eval type from reason text
+    let evalType = classifyEval(reason);
 
     for (const att of attendees) {
       const email = att.email.toLowerCase();
@@ -1323,14 +1387,17 @@ function showSyncModal(candidates, errorType) {
         <div style="font-weight:500;margin-bottom:2px">${c.firstName} ${c.lastName}</div>
         <div style="font-size:11px;color:var(--text-muted)">${c.email}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.eventTitle} · ${formatDateShort(c.eventDate)}</div>
+        ${c.reason ? `<div style="font-size:11px;color:var(--accent);margin-top:2px">↳ "${c.reason}"</div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
         <select id="eval_${i}" class="form-select" style="font-size:11px;padding:3px 6px">
-          <option value="faa">FAA/HIMS</option>
-          <option value="lsat">LSAT</option>
-          <option value="mcat">MCAT</option>
-          <option value="therapy">Therapy</option>
-          <option value="other">Other</option>
+          <option value="faaadhd" ${c.eval==='faaadhd'?'selected':''}>FAA ADHD Fast Track</option>
+          <option value="faa" ${c.eval==='faa'?'selected':''}>FAA / HIMS</option>
+          <option value="lsat" ${c.eval==='lsat'?'selected':''}>LSAT</option>
+          <option value="mcat" ${c.eval==='mcat'?'selected':''}>MCAT</option>
+          <option value="accommodations" ${c.eval==='accommodations'?'selected':''}>Accommodations</option>
+          <option value="therapy" ${c.eval==='therapy'?'selected':''}>Therapy</option>
+          <option value="other" ${c.eval==='other'?'selected':''}>Other</option>
         </select>
       </div>
     </div>

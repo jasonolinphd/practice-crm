@@ -694,6 +694,17 @@
         <span class="search-icon">⌕</span>
         <input type="text" id="searchInput" placeholder="Search by name, email, phone..." oninput="renderList()">
       </div>
+      <select class="form-select btn-sm" id="dateFilterSelect" onchange="renderList()" style="width:140px">
+        <option value="all">All time</option>
+        <option value="week">Last 7 days</option>
+        <option value="month">Last 30 days</option>
+        <option value="quarter">Last 90 days</option>
+      </select>
+      <select class="form-select btn-sm" id="dateFieldSelect" onchange="renderList()" style="width:150px">
+        <option value="dateAdded">By date added</option>
+        <option value="consultDate">By consult date</option>
+        <option value="lastContacted">By last contacted</option>
+      </select>
       <select class="form-select btn-sm" id="sortSelect" onchange="renderList()" style="width:130px">
         <option value="date-desc">Newest first</option>
         <option value="date-asc">Oldest first</option>
@@ -747,6 +758,14 @@
           <div class="detail-field">
             <div class="detail-field-label">Added</div>
             <div class="detail-field-value" id="dDate">—</div>
+          </div>
+          <div class="detail-field">
+            <div class="detail-field-label">Consultation Date</div>
+            <div class="detail-field-value" id="dConsultDate">—</div>
+          </div>
+          <div class="detail-field">
+            <div class="detail-field-label">Last Contacted</div>
+            <div class="detail-field-value" id="dLastContacted">—</div>
           </div>
           <div class="detail-field">
             <div class="detail-field-label">Source</div>
@@ -834,6 +853,16 @@
           <input class="form-input" id="fDate" type="date">
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Last Contacted</label>
+          <input class="form-input" id="fLastContacted" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Consultation Date</label>
+          <input class="form-input" id="fConsultDate" type="date">
+        </div>
+      </div>
       <div class="form-row full">
         <div class="form-group">
           <label class="form-label">Notes</label>
@@ -891,6 +920,13 @@ function initials(c) {
 function renderList() {
   const q = document.getElementById('searchInput').value.toLowerCase().trim();
   const sort = document.getElementById('sortSelect').value;
+  const dateFilter = document.getElementById('dateFilterSelect').value;
+  const dateField = document.getElementById('dateFieldSelect').value;
+
+  const cutoff = dateFilter === 'week' ? Date.now() - 7*86400000
+    : dateFilter === 'month' ? Date.now() - 30*86400000
+    : dateFilter === 'quarter' ? Date.now() - 90*86400000
+    : 0;
 
   let filtered = contacts.filter(c => {
     const matchStage = !activeStageFilter || c.stage === activeStageFilter;
@@ -899,7 +935,16 @@ function renderList() {
     const matchSearch = !q || name.includes(q) ||
       (c.email||'').toLowerCase().includes(q) ||
       (c.phone||'').toLowerCase().includes(q);
-    return matchStage && matchEval && matchSearch;
+
+    let matchDate = true;
+    if (cutoff > 0) {
+      const fieldVal = dateField === 'consultDate' ? c.consultDate
+        : dateField === 'lastContacted' ? c.lastContacted
+        : (c.dateAdded || c.created);
+      matchDate = fieldVal && fieldVal >= cutoff;
+    }
+
+    return matchStage && matchEval && matchSearch && matchDate;
   });
 
   if (sort === 'date-desc') filtered.sort((a,b) => b.created - a.created);
@@ -997,6 +1042,8 @@ function selectContact(id) {
   document.getElementById('dEmail').textContent = c.email || '—';
   document.getElementById('dPhone').textContent = c.phone || '—';
   document.getElementById('dDate').textContent = formatDateLong(c.dateAdded||c.created);
+  document.getElementById('dConsultDate').textContent = formatDateLong(c.consultDate);
+  document.getElementById('dLastContacted').textContent = c.lastContacted ? formatDateLong(c.lastContacted) : '—';
   document.getElementById('dSource').textContent = c.source || '—';
 
   const notesEl = document.getElementById('dNotes');
@@ -1036,21 +1083,25 @@ function openEditModal() {
   document.getElementById('fLastName').value  = c.lastName  || '';
   document.getElementById('fEmail').value     = c.email     || '';
   document.getElementById('fPhone').value     = c.phone     || '';
-  document.getElementById('fEval').value      = c.eval      || 'faa';
+  document.getElementById('fEval').value      = c.eval      || 'other';
   document.getElementById('fStage').value     = c.stage     || 'inquiry';
   document.getElementById('fSource').value    = c.source    || 'Google Calendar';
   document.getElementById('fNotes').value     = c.notes     || '';
   if (c.dateAdded) {
     document.getElementById('fDate').value = new Date(c.dateAdded).toISOString().split('T')[0];
   }
+  document.getElementById('fLastContacted').value = c.lastContacted
+    ? new Date(c.lastContacted).toISOString().split('T')[0] : '';
+  document.getElementById('fConsultDate').value = c.consultDate
+    ? new Date(c.consultDate).toISOString().split('T')[0] : '';
   document.getElementById('modalOverlay').style.display = 'flex';
 }
 
 function clearForm() {
-  ['fFirstName','fLastName','fEmail','fPhone','fNotes'].forEach(id => {
+  ['fFirstName','fLastName','fEmail','fPhone','fNotes','fLastContacted','fConsultDate'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  document.getElementById('fEval').value   = 'faa';
+  document.getElementById('fEval').value   = 'other';
   document.getElementById('fStage').value  = 'inquiry';
   document.getElementById('fSource').value = 'Google Calendar';
 }
@@ -1077,6 +1128,11 @@ function saveContact() {
   const dateVal = document.getElementById('fDate').value;
   const dateAdded = dateVal ? new Date(dateVal).getTime() : Date.now();
 
+  const lcVal = document.getElementById('fLastContacted').value;
+  const csVal = document.getElementById('fConsultDate').value;
+  const lastContacted = lcVal ? new Date(lcVal).getTime() : null;
+  const consultDate   = csVal ? new Date(csVal).getTime() : null;
+
   if (editingId) {
     const idx = contacts.findIndex(x => x.id === editingId);
     if (idx !== -1) {
@@ -1089,7 +1145,7 @@ function saveContact() {
         stage:   document.getElementById('fStage').value,
         source:  document.getElementById('fSource').value,
         notes:   document.getElementById('fNotes').value.trim(),
-        dateAdded,
+        dateAdded, lastContacted, consultDate,
       };
     }
   } else {
@@ -1102,7 +1158,7 @@ function saveContact() {
       stage:   document.getElementById('fStage').value,
       source:  document.getElementById('fSource').value,
       notes:   document.getElementById('fNotes').value.trim(),
-      dateAdded,
+      dateAdded, lastContacted, consultDate,
       created: Date.now(),
     });
   }
@@ -1298,11 +1354,12 @@ function extractContactsFromEvents(events) {
       ? `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`
       : (ev.location || '');
 
-    // Extract reason for consultation from description
+    // Extract reason for consultation from description — strip HTML first
     let reason = '';
     const desc = ev.description || '';
-    const reasonMatch = desc.match(/reason for consultation[:\s]+([^\n<]+)/i);
-    if (reasonMatch) reason = reasonMatch[1].trim();
+    const descStripped = desc.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    const reasonMatch = descStripped.match(/reason for consultation[:\s]+([^]+?)(?:\s{2,}|$)/i);
+    if (reasonMatch) reason = reasonMatch[1].trim().split(/\s{2,}/)[0].trim();
 
     // Smart classify eval type from reason text
     let evalType = classifyEval(reason);
@@ -1443,6 +1500,8 @@ function importSelected(candidates) {
         c.reason ? `Reason: ${c.reason}` : '',
       ].filter(Boolean).join('\n'),
       dateAdded: c.eventDate ? new Date(c.eventDate).getTime() : Date.now(),
+      consultDate: c.eventDate ? new Date(c.eventDate).getTime() : null,
+      lastContacted: null,
       created: Date.now(),
     });
     added++;

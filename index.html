@@ -1186,17 +1186,44 @@ function extractContactsFromEvents(events) {
   const candidates = [];
 
   for (const ev of events) {
-    const attendees = ev.attendees || [];
+    const attendees = (ev.attendees || []).filter(a => a.email && !a.self);
+    if (!attendees.length) continue;
+
+    // Extract name from event title — format: "Title (First Last)"
+    let nameFromTitle = '';
+    const titleMatch = (ev.summary || '').match(/\(([^)]+)\)\s*$/);
+    if (titleMatch) nameFromTitle = titleMatch[1].trim();
+
+    // Extract phone from location field
+    const phone = (ev.location || '').replace(/\D/g, '').slice(-10);
+    const phoneFormatted = phone.length === 10
+      ? `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`
+      : (ev.location || '');
+
+    // Extract reason for consultation from description
+    let reason = '';
+    const desc = ev.description || '';
+    const reasonMatch = desc.match(/reason for consultation[:\s]+([^\n<]+)/i);
+    if (reasonMatch) reason = reasonMatch[1].trim();
+
+    // Map reason to eval type
+    let evalType = 'other';
+    const reasonLower = reason.toLowerCase();
+    if (reasonLower.includes('faa') || reasonLower.includes('hims') || reasonLower.includes('pilot') || reasonLower.includes('aviation')) evalType = 'faa';
+    else if (reasonLower.includes('lsat')) evalType = 'lsat';
+    else if (reasonLower.includes('mcat')) evalType = 'mcat';
+    else if (reasonLower.includes('therapy') || reasonLower.includes('counseling')) evalType = 'therapy';
+
     for (const att of attendees) {
-      if (!att.email || att.self) continue;
       const email = att.email.toLowerCase();
       if (seen.has(email)) continue;
       seen.add(email);
 
-      // Parse name from attendee displayName or email
+      // Name priority: title parentheses > attendee displayName > email prefix
       let firstName = '', lastName = '';
-      if (att.displayName) {
-        const parts = att.displayName.trim().split(' ');
+      const nameStr = nameFromTitle || att.displayName || '';
+      if (nameStr) {
+        const parts = nameStr.trim().split(' ');
         firstName = parts[0] || '';
         lastName = parts.slice(1).join(' ') || '';
       } else {
@@ -1206,11 +1233,12 @@ function extractContactsFromEvents(events) {
       candidates.push({
         firstName, lastName,
         email: att.email,
-        phone: '',
+        phone: phoneFormatted,
         eventTitle: ev.summary || '',
         eventDate: ev.start?.dateTime || ev.start?.date || '',
+        reason,
         source: 'Google Calendar',
-        eval: 'faa',
+        eval: evalType,
         stage: 'inquiry',
       });
     }
@@ -1310,11 +1338,14 @@ function importSelected(candidates) {
       firstName: c.firstName,
       lastName: c.lastName,
       email: c.email,
-      phone: '',
+      phone: c.phone || '',
       eval: evalVal,
       stage: 'inquiry',
       source: 'Google Calendar',
-      notes: c.eventTitle ? `Booked: ${c.eventTitle}` : '',
+      notes: [
+        c.eventTitle ? `Booked: ${c.eventTitle}` : '',
+        c.reason ? `Reason: ${c.reason}` : '',
+      ].filter(Boolean).join('\n'),
       dateAdded: c.eventDate ? new Date(c.eventDate).getTime() : Date.now(),
       created: Date.now(),
     });

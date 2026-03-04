@@ -474,7 +474,27 @@
   .eval-therapy { background: #f2f7ea; color: #40600a; border: 1px solid #b8d4a0; }
   .eval-other { background: #f2eaf7; color: #50207a; border: 1px solid #c8a8e0; }
 
-  /* EMPTY STATE */
+  /* BULK SELECT */
+  .bulk-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    background: var(--accent-light);
+    border-bottom: 1px solid #b8d0e8;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .bulk-bar.visible { display: flex; }
+  .contact-checkbox {
+    width: 16px; height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+  }
+  .select-mode .contact-card { cursor: default; }
+  .select-mode .contact-card:hover { border-color: var(--border); box-shadow: none; }
+
   .empty-list {
     text-align: center;
     padding: 48px 24px;
@@ -661,6 +681,14 @@
         <option value="date-asc">Oldest first</option>
         <option value="name">Name A–Z</option>
       </select>
+      <button class="btn btn-secondary btn-sm" id="selectModeBtn" onclick="toggleSelectMode()">Select</button>
+    </div>
+
+    <div class="bulk-bar" id="bulkBar">
+      <input type="checkbox" class="contact-checkbox" id="selectAllCheck" onchange="toggleSelectAll(this.checked)" title="Select all">
+      <span id="bulkCount">0 selected</span>
+      <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete Selected</button>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="toggleSelectMode()">Cancel</button>
     </div>
 
     <div class="result-count" id="resultCount"></div>
@@ -871,7 +899,8 @@ function renderList() {
   }
 
   list.innerHTML = filtered.map(c => `
-    <div class="contact-card${c.id === selectedId ? ' selected' : ''}" onclick="selectContact('${c.id}')">
+    <div class="contact-card${!selectMode && c.id === selectedId ? ' selected' : ''}" onclick="${selectMode ? '' : `selectContact('${c.id}')`}">
+      ${selectMode ? `<input type="checkbox" class="contact-checkbox" data-id="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} onchange="toggleContactCheck('${c.id}', this.checked)" onclick="event.stopPropagation()">` : ''}
       <div class="contact-avatar">${initials(c)}</div>
       <div class="contact-main">
         <div class="contact-name">${c.firstName} ${c.lastName}</div>
@@ -1364,6 +1393,57 @@ function importSelected(candidates) {
     document.body.appendChild(msg);
     setTimeout(() => msg.remove(), 3000);
   }
+}
+
+// ─── BULK SELECT ──────────────────────────────────────────────────────────────
+let selectMode = false;
+let selectedIds = new Set();
+
+function toggleSelectMode() {
+  selectMode = !selectMode;
+  selectedIds.clear();
+  document.getElementById('bulkBar').classList.toggle('visible', selectMode);
+  document.getElementById('selectModeBtn').textContent = selectMode ? 'Cancel' : 'Select';
+  document.getElementById('selectAllCheck').checked = false;
+  renderList();
+}
+
+function toggleSelectAll(checked) {
+  const checkboxes = document.querySelectorAll('.contact-checkbox[data-id]');
+  checkboxes.forEach(cb => {
+    cb.checked = checked;
+    if (checked) selectedIds.add(cb.dataset.id);
+    else selectedIds.delete(cb.dataset.id);
+  });
+  updateBulkCount();
+}
+
+function toggleContactCheck(id, checked) {
+  if (checked) selectedIds.add(id);
+  else selectedIds.delete(id);
+  updateBulkCount();
+  // Update select-all checkbox state
+  const all = document.querySelectorAll('.contact-checkbox[data-id]');
+  const allChecked = [...all].every(cb => cb.checked);
+  document.getElementById('selectAllCheck').checked = allChecked && all.length > 0;
+}
+
+function updateBulkCount() {
+  document.getElementById('bulkCount').textContent = `${selectedIds.size} selected`;
+}
+
+function bulkDelete() {
+  if (!selectedIds.size) return;
+  if (!confirm(`Delete ${selectedIds.size} contact${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+  contacts = contacts.filter(c => !selectedIds.has(c.id));
+  saveContacts(contacts);
+  selectedIds.clear();
+  selectedId = null;
+  document.getElementById('detailEmpty').style.display = 'flex';
+  document.getElementById('detailContent').style.display = 'none';
+  toggleSelectMode();
+  renderList();
+  updateCounts();
 }
 
 // ─── KEYBOARD ─────────────────────────────────────────────────────────────────

@@ -1984,14 +1984,23 @@ function getEmailBody(msg) {
 }
 
 function extractContactsFromEmails(emails) {
-  const seen = new Set(contacts.map(c => c.email?.toLowerCase()).filter(Boolean));
+  const seenEmails = new Set(contacts.map(c => c.email?.toLowerCase()).filter(Boolean));
   const candidates = [];
+
+  // Build lookup maps for fuzzy duplicate detection
+  const nameMap = {};
+  const phoneMap = {};
+  contacts.forEach(c => {
+    const name = `${c.firstName} ${c.lastName}`.toLowerCase().trim();
+    if (name) nameMap[name] = c.email;
+    const phone = (c.phone||'').replace(/\D/g,'');
+    if (phone.length >= 10) phoneMap[phone.slice(-10)] = c.email;
+  });
 
   for (const msg of emails) {
     const body = getEmailBody(msg);
     if (!body) continue;
 
-    // Parse fields from Wix email body
     const nameMatch   = body.match(/Name:\s*(.+)/i);
     const emailMatch  = body.match(/Email:\s*([^\s\n]+)/i);
     const phoneMatch  = body.match(/Phone:\s*(.+)/i);
@@ -2000,8 +2009,6 @@ function extractContactsFromEmails(emails) {
 
     if (!emailMatch) continue;
     const email = emailMatch[1].trim().toLowerCase();
-    if (seen.has(email)) continue;
-    seen.add(email);
 
     const fullName = nameMatch ? nameMatch[1].trim() : '';
     const nameParts = fullName.split(' ');
@@ -2013,17 +2020,34 @@ function extractContactsFromEmails(emails) {
     const message = msgMatch ? msgMatch[1].trim() : '';
     const evalType = classifyEval(reason + ' ' + message);
 
-    // Get email date
     const dateHeader = (msg.payload?.headers || []).find(h => h.name === 'Date');
     const emailDate = dateHeader ? new Date(dateHeader.value).getTime() : Date.now();
+
+    // Duplicate detection
+    let dupStatus = null; // null = clean, 'exact' = same email, 'name' = same name, 'phone' = same phone
+    let dupEmail = null;
+
+    if (seenEmails.has(email)) {
+      dupStatus = 'exact';
+      dupEmail = email;
+    } else {
+      const nameKey = `${firstName} ${lastName}`.toLowerCase().trim();
+      const phoneDigits = phone.replace(/\D/g,'').slice(-10);
+      if (nameKey && nameMap[nameKey]) {
+        dupStatus = 'name';
+        dupEmail = nameMap[nameKey];
+      } else if (phoneDigits.length === 10 && phoneMap[phoneDigits]) {
+        dupStatus = 'phone';
+        dupEmail = phoneMap[phoneDigits];
+      }
+    }
 
     candidates.push({
       firstName, lastName, email,
       phone: formatPhone(phone),
-      reason, message,
-      evalType,
-      emailDate,
+      reason, message, evalType, emailDate,
       source: 'Wix Form',
+      dupStatus, dupEmail,
     });
   }
   return candidates;
@@ -2058,24 +2082,40 @@ function showWixModal(candidates) {
   const EVAL_OPTIONS = Object.entries(EVAL_LABELS).map(([v,l]) =>
     `<option value="${v}">${l}</option>`).join('');
 
-  const rows = candidates.map((c, i) => `
-    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
-      <input type="checkbox" id="wix_${i}" checked style="margin-top:3px;flex-shrink:0">
+  const dupCount = candidates.filter(c => c.dupStatus === 'exact').length;
+
+  const rows = candidates.map((c, i) => {
+    const isExact = c.dupStatus === 'exact';
+    const isFuzzy = c.dupStatus === 'name' || c.dupStatus === 'phone';
+    const dupLabel = isExact
+      ? `<div style="font-size:11px;color:var(--danger);margin-bottom:4px">⚠ Already in CRM (${c.dupEmail})</div>`
+      : isFuzzy
+      ? `<div style="font-size:11px;color:#c47c00;margin-bottom:4px">⚠ Possible duplicate — ${c.dupStatus} match with ${c.dupEmail}</div>`
+      : '';
+    return `
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);${isExact?'opacity:0.55':''}">
+      <input type="checkbox" id="wix_${i}" ${isExact?'':'checked'} style="margin-top:3px;flex-shrink:0">
       <div style="flex:1;min-width:0">
         <div style="font-weight:500;margin-bottom:2px">${c.firstName} ${c.lastName}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${c.email} · ${c.phone||'no phone'}</div>
+        ${dupLabel}
         ${c.reason ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Reason: ${c.reason}</div>` : ''}
         <select id="wixeval_${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text)">
           ${EVAL_OPTIONS}
         </select>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+
+  const dupNote = dupCount > 0
+    ? `<div style="font-size:11px;color:var(--text-muted);padding:8px 0 0">${dupCount} exact duplicate${dupCount!==1?'s':''} unchecked by default.</div>`
+    : '';
 
   modal.innerHTML = `<div class="modal" style="max-width:520px">
-    <div class="modal-header">Wix Form Sync — ${candidates.length} new submission${candidates.length!==1?'s':''}
+    <div class="modal-header">Wix Form Sync — ${candidates.length} submission${candidates.length!==1?'s':''}
       <button class="modal-close" onclick="document.getElementById('wixModal').remove()">✕</button>
     </div>
-    <div class="modal-body" style="max-height:420px;overflow-y:auto">${rows}</div>
+    <div class="modal-body" style="max-height:420px;overflow-y:auto">${rows}${dupNote}</div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="document.getElementById('wixModal').remove()">Cancel</button>
       <button class="btn btn-primary" onclick="importWixContacts(${JSON.stringify(candidates).replace(/"/g,'&quot;')})">Import Selected</button>

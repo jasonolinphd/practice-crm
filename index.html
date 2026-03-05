@@ -578,6 +578,7 @@
     <button class="btn btn-ghost btn-sm" onclick="exportData()">↓ Export</button>
     <button class="btn btn-ghost btn-sm" id="migrateBtn" onclick="migrateLocalToSheets()" title="One-time: push local contacts to Google Sheets">↑ Migrate to Sheets</button>
     <button class="btn btn-ghost btn-sm" id="gcalBtn" onclick="startGCalSync()">⟳ Sync Calendar</button>
+    <button class="btn btn-ghost btn-sm" id="wixBtn" onclick="startWixSync()">⟳ Sync Wix</button>
     <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ New Contact</button>
   </div>
 </div>
@@ -793,6 +794,14 @@
             <div class="detail-field-label">Phone</div>
             <div class="detail-field-value" id="dPhone">—</div>
           </div>
+          <div class="detail-field" id="dOutcomeField" style="display:none">
+            <div class="detail-field-label">Outcome</div>
+            <div class="detail-field-value" id="dOutcome">—</div>
+          </div>
+          <div class="detail-field" id="dOutcomeNotesField" style="display:none">
+            <div class="detail-field-label">Outcome Notes</div>
+            <div class="detail-field-value" id="dOutcomeNotes">—</div>
+          </div>
           <div class="detail-field" id="dTherapyStatusField" style="display:none">
             <div class="detail-field-label">Therapy Status</div>
             <div class="detail-field-value" id="dTherapyStatus">—</div>
@@ -892,6 +901,23 @@
         </div>
         </div>
       </div>
+      <div class="form-row" id="outcomeGroup" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Outcome</label>
+          <select class="form-select" id="fOutcome">
+            <option value="">— Unknown —</option>
+            <option value="approved">Approved</option>
+            <option value="denied">Denied</option>
+            <option value="appealing">Appealing</option>
+            <option value="withdrawn">Withdrawn</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Outcome Notes</label>
+          <input class="form-input" id="fOutcomeNotes" placeholder="e.g. LSAC approved 50% extra time">
+        </div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Source</label>
@@ -946,7 +972,7 @@
 const SHEET_ID = '1I4cCEvH58XWLN_tB-vWW079wWRnidxt4yoD9Ir9oz8Q';
 const SHEET_NAME = 'Sheet1';
 const GCAL_CLIENT_ID = '53225490829-8fh0phgirplq1s54nhr13j5gi8kfeadm.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/spreadsheets';
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/gmail.readonly';
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let contacts = [];
@@ -958,7 +984,7 @@ let editingId = null;
 let authToken = null;
 
 // ─── SHEET COLUMNS (must match your header row) ───────────────────────────────
-const COLS = ['id','firstName','lastName','email','phone','eval','stage','source','notes','dateAdded','consultDate','lastContacted','created','eventTitle','reason','therapyStatus'];
+const COLS = ['id','firstName','lastName','email','phone','eval','stage','source','notes','dateAdded','consultDate','lastContacted','created','eventTitle','reason','therapyStatus','outcome','outcomeNotes'];
 
 function contactToRow(c) {
   return COLS.map(k => c[k] !== undefined && c[k] !== null ? String(c[k]) : '');
@@ -1302,8 +1328,13 @@ function selectContact(id) {
   document.getElementById('dEmail').textContent = c.email || '—';
   document.getElementById('dPhone').textContent = c.phone || '—';
 
-  // Therapy status
-  const tsField = document.getElementById('dTherapyStatusField');
+  // Outcome
+  const evalHasOutcome = ['faaadhd','faa','lsat','mcat','accommodations'].includes(c.eval);
+  document.getElementById('dOutcomeField').style.display = evalHasOutcome ? 'block' : 'none';
+  document.getElementById('dOutcomeNotesField').style.display = evalHasOutcome && c.outcomeNotes ? 'block' : 'none';
+  const outcomeLabels = { approved:'Approved', denied:'Denied', appealing:'Appealing', withdrawn:'Withdrawn', unknown:'Unknown' };
+  document.getElementById('dOutcome').textContent = outcomeLabels[c.outcome] || '—';
+  document.getElementById('dOutcomeNotes').textContent = c.outcomeNotes || '—';
   const tsVal = document.getElementById('dTherapyStatus');
   if (c.eval === 'therapy') {
     tsField.style.display = 'block';
@@ -1334,9 +1365,12 @@ function closeDetail() {
 }
 
 function toggleTherapyStatus() {
-  const isTherapy = document.getElementById('fEval').value === 'therapy';
+  const eval_ = document.getElementById('fEval').value;
+  const isTherapy = eval_ === 'therapy';
+  const hasOutcome = ['faaadhd','faa','lsat','mcat','accommodations'].includes(eval_);
   document.getElementById('therapyStatusGroup').style.display = isTherapy ? 'block' : 'none';
   document.getElementById('stageGroup').style.display = isTherapy ? 'none' : 'block';
+  document.getElementById('outcomeGroup').style.display = hasOutcome ? 'flex' : 'none';
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
@@ -1364,6 +1398,8 @@ function openEditModal() {
   document.getElementById('fSource').value    = c.source    || 'Google Calendar';
   document.getElementById('fNotes').value     = c.notes     || '';
   document.getElementById('fTherapyStatus').value = c.therapyStatus || '';
+  document.getElementById('fOutcome').value = c.outcome || '';
+  document.getElementById('fOutcomeNotes').value = c.outcomeNotes || '';
   toggleTherapyStatus();
   if (c.dateAdded) {
     document.getElementById('fDate').value = new Date(c.dateAdded).toISOString().split('T')[0];
@@ -1376,13 +1412,14 @@ function openEditModal() {
 }
 
 function clearForm() {
-  ['fFirstName','fLastName','fEmail','fPhone','fNotes','fLastContacted','fConsultDate'].forEach(id => {
+  ['fFirstName','fLastName','fEmail','fPhone','fNotes','fLastContacted','fConsultDate','fOutcomeNotes'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('fEval').value          = 'other';
   document.getElementById('fStage').value         = 'inquiry';
   document.getElementById('fSource').value        = 'Google Calendar';
   document.getElementById('fTherapyStatus').value = '';
+  document.getElementById('fOutcome').value       = '';
   toggleTherapyStatus();
 }
 
@@ -1409,6 +1446,8 @@ function saveContact() {
   const dateAdded = dateVal ? new Date(dateVal).getTime() : Date.now();
 
   const therapyStatus = document.getElementById('fTherapyStatus').value || null;
+  const outcome = document.getElementById('fOutcome').value || null;
+  const outcomeNotes = document.getElementById('fOutcomeNotes').value.trim() || null;
   const lcVal = document.getElementById('fLastContacted').value;
   const csVal = document.getElementById('fConsultDate').value;
   const lastContacted = lcVal ? new Date(lcVal).getTime() : null;
@@ -1426,7 +1465,7 @@ function saveContact() {
         stage:   document.getElementById('fStage').value,
         source:  document.getElementById('fSource').value,
         notes:   document.getElementById('fNotes').value.trim(),
-        dateAdded, lastContacted, consultDate, therapyStatus,
+        dateAdded, lastContacted, consultDate, therapyStatus, outcome, outcomeNotes,
       };
     }
   } else {
@@ -1439,7 +1478,7 @@ function saveContact() {
       stage:   document.getElementById('fStage').value,
       source:  document.getElementById('fSource').value,
       notes:   document.getElementById('fNotes').value.trim(),
-      dateAdded, lastContacted, consultDate, therapyStatus,
+      dateAdded, lastContacted, consultDate, therapyStatus, outcome, outcomeNotes,
       created: Date.now(),
     });
   }
@@ -1869,7 +1908,223 @@ function copyText(text, btn) {
   });
 }
 
-// ─── BULK SELECT ──────────────────────────────────────────────────────────────
+// ─── WIX / GMAIL SYNC ────────────────────────────────────────────────────────
+function startWixSync() {
+  requireAuth(fetchWixEmails);
+}
+
+async function fetchWixEmails() {
+  const btn = document.getElementById('wixBtn');
+  btn.textContent = '⟳ Syncing...';
+  btn.disabled = true;
+
+  try {
+    // Search Gmail for Wix form submissions in last 90 days
+    const after = Math.floor((Date.now() - 90 * 86400000) / 1000);
+    const query = `subject:"[Jason Olin PhD] Contacts Form - new submission" after:${after}`;
+    const searchUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?` +
+      new URLSearchParams({ q: query, maxResults: '100' });
+
+    const searchRes = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+
+    if (searchRes.status === 401) {
+      localStorage.removeItem('gtoken');
+      authToken = null;
+      showSyncModal([], 'auth_error');
+      return;
+    }
+
+    const searchData = await searchRes.json();
+    const messages = searchData.messages || [];
+
+    if (!messages.length) {
+      showWixModal([]);
+      return;
+    }
+
+    // Fetch each email in parallel (up to 50)
+    const fetches = messages.slice(0, 50).map(m =>
+      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      }).then(r => r.json())
+    );
+    const emails = await Promise.all(fetches);
+    const candidates = extractContactsFromEmails(emails);
+    showWixModal(candidates);
+
+  } catch(e) {
+    showStatus('Wix sync failed — check connection', 4000);
+    console.error(e);
+  } finally {
+    btn.textContent = '⟳ Sync Wix';
+    btn.disabled = false;
+  }
+}
+
+function getEmailBody(msg) {
+  // Get plain text body from Gmail message payload
+  function decode(str) {
+    return decodeURIComponent(escape(atob(str.replace(/-/g,'+').replace(/_/g,'/'))));
+  }
+  function findPart(parts, mimeType) {
+    for (const p of parts || []) {
+      if (p.mimeType === mimeType && p.body?.data) return decode(p.body.data);
+      if (p.parts) { const r = findPart(p.parts, mimeType); if (r) return r; }
+    }
+    return null;
+  }
+  const payload = msg.payload || {};
+  if (payload.body?.data) {
+    try { return decode(payload.body.data); } catch(e) {}
+  }
+  return findPart(payload.parts, 'text/plain') ||
+         findPart(payload.parts, 'text/html') || '';
+}
+
+function extractContactsFromEmails(emails) {
+  const seen = new Set(contacts.map(c => c.email?.toLowerCase()).filter(Boolean));
+  const candidates = [];
+
+  for (const msg of emails) {
+    const body = getEmailBody(msg);
+    if (!body) continue;
+
+    // Parse fields from Wix email body
+    const nameMatch   = body.match(/Name:\s*(.+)/i);
+    const emailMatch  = body.match(/Email:\s*([^\s\n]+)/i);
+    const phoneMatch  = body.match(/Phone:\s*(.+)/i);
+    const reasonMatch = body.match(/Reason for reaching out:\s*(.+)/i);
+    const msgMatch    = body.match(/Message:\s*([\s\S]+?)(?:\n\n|\n[A-Z]|$)/i);
+
+    if (!emailMatch) continue;
+    const email = emailMatch[1].trim().toLowerCase();
+    if (seen.has(email)) continue;
+    seen.add(email);
+
+    const fullName = nameMatch ? nameMatch[1].trim() : '';
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName  = nameParts.slice(1).join(' ') || '';
+
+    const phone = phoneMatch ? phoneMatch[1].trim() : '';
+    const reason = reasonMatch ? reasonMatch[1].trim() : '';
+    const message = msgMatch ? msgMatch[1].trim() : '';
+    const evalType = classifyEval(reason + ' ' + message);
+
+    // Get email date
+    const dateHeader = (msg.payload?.headers || []).find(h => h.name === 'Date');
+    const emailDate = dateHeader ? new Date(dateHeader.value).getTime() : Date.now();
+
+    candidates.push({
+      firstName, lastName, email,
+      phone: formatPhone(phone),
+      reason, message,
+      evalType,
+      emailDate,
+      source: 'Wix Form',
+    });
+  }
+  return candidates;
+}
+
+function formatPhone(raw) {
+  const digits = raw.replace(/\D/g,'').slice(-10);
+  return digits.length === 10
+    ? `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`
+    : raw;
+}
+
+function showWixModal(candidates) {
+  const existing = document.getElementById('wixModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wixModal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:300';
+
+  if (!candidates.length) {
+    modal.innerHTML = `<div class="modal" style="max-width:420px">
+      <div class="modal-header">Wix Form Sync <button class="modal-close" onclick="document.getElementById('wixModal').remove()">✕</button></div>
+      <div class="modal-body"><p style="color:var(--text-muted);line-height:1.7">No new form submissions found in the last 90 days.</p></div>
+      <div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('wixModal').remove()">Close</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    return;
+  }
+
+  const EVAL_OPTIONS = Object.entries(EVAL_LABELS).map(([v,l]) =>
+    `<option value="${v}">${l}</option>`).join('');
+
+  const rows = candidates.map((c, i) => `
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+      <input type="checkbox" id="wix_${i}" checked style="margin-top:3px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;margin-bottom:2px">${c.firstName} ${c.lastName}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${c.email} · ${c.phone||'no phone'}</div>
+        ${c.reason ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Reason: ${c.reason}</div>` : ''}
+        <select id="wixeval_${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text)">
+          ${EVAL_OPTIONS}
+        </select>
+      </div>
+    </div>`).join('');
+
+  modal.innerHTML = `<div class="modal" style="max-width:520px">
+    <div class="modal-header">Wix Form Sync — ${candidates.length} new submission${candidates.length!==1?'s':''}
+      <button class="modal-close" onclick="document.getElementById('wixModal').remove()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:420px;overflow-y:auto">${rows}</div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="document.getElementById('wixModal').remove()">Cancel</button>
+      <button class="btn btn-primary" onclick="importWixContacts(${JSON.stringify(candidates).replace(/"/g,'&quot;')})">Import Selected</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+
+  // Set eval selects to auto-classified values
+  candidates.forEach((c, i) => {
+    document.getElementById(`wixeval_${i}`).value = c.evalType;
+  });
+}
+
+function importWixContacts(candidates) {
+  let imported = 0;
+  candidates.forEach((c, i) => {
+    const cb = document.getElementById(`wix_${i}`);
+    if (!cb || !cb.checked) return;
+    const evalVal = document.getElementById(`wixeval_${i}`)?.value || c.evalType;
+    contacts.unshift({
+      id: 'c' + Date.now() + i,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email,
+      phone: c.phone || '',
+      eval: evalVal,
+      stage: 'inquiry',
+      source: 'Wix Form',
+      notes: [
+        c.reason ? `Reason: ${c.reason}` : '',
+        c.message ? `Message: ${c.message}` : '',
+      ].filter(Boolean).join('\n'),
+      dateAdded: c.emailDate || Date.now(),
+      consultDate: null,
+      lastContacted: null,
+      therapyStatus: null,
+      outcome: null,
+      outcomeNotes: null,
+      created: Date.now(),
+    });
+    imported++;
+  });
+
+  document.getElementById('wixModal').remove();
+  saveToSheets();
+  renderList();
+  updateCounts();
+  showStatus(`✓ ${imported} Wix contact${imported!==1?'s':''} imported`, 3000);
+}
 let selectMode = false;
 let selectedIds = new Set();
 

@@ -990,10 +990,11 @@ function contactToRow(c) {
   return COLS.map(k => c[k] !== undefined && c[k] !== null ? String(c[k]) : '');
 }
 
-function rowToContact(row) {
+function rowToContact(row, headers) {
   const c = {};
-  COLS.forEach((k, i) => {
-    const v = row[i] || '';
+  COLS.forEach(k => {
+    const i = headers.indexOf(k);
+    const v = i >= 0 ? (row[i] || '') : '';
     c[k] = ['dateAdded','consultDate','lastContacted','created'].includes(k)
       ? (v ? parseInt(v) : null) : v;
   });
@@ -1092,9 +1093,12 @@ async function sheetsUpdate(range, values) {
 async function loadFromSheets() {
   showStatus('Loading contacts…');
   try {
-    const data = await sheetsGet(`${SHEET_NAME}!A2:O`);
-    const rows = data.values || [];
-    contacts = rows.filter(r => r[0]).map(rowToContact);
+    const data = await sheetsGet(`${SHEET_NAME}!A1:S`);
+    const allRows = data.values || [];
+    if (!allRows.length) { contacts = []; renderList(); updateCounts(); return; }
+    const headers = allRows[0];
+    const rows = allRows.slice(1);
+    contacts = rows.filter(r => r[0]).map(r => rowToContact(r, headers));
     renderList();
     updateCounts();
     showStatus(`${contacts.length} contacts loaded`, 2000);
@@ -1107,16 +1111,58 @@ async function loadFromSheets() {
 // ─── SAVE ALL TO SHEETS (full rewrite) ────────────────────────────────────────
 async function saveToSheets() {
   try {
-    // Clear data rows (keep header row 1)
-    await sheetsClear(`${SHEET_NAME}!A2:O`);
-    if (contacts.length > 0) {
-      await sheetsAppend(contacts.map(contactToRow));
+    // Read current sheet to get header row and existing row positions
+    const existing = await sheetsGet(`${SHEET_NAME}!A1:S`);
+    const allRows = existing.values || [];
+
+    // If sheet is empty or has no header, write everything from scratch
+    if (allRows.length === 0) {
+      await sheetsAppend([COLS, ...contacts.map(contactToRow)]);
+      return;
+    }
+
+    // Ensure header row is correct — update it if needed
+    const headerRange = `${SHEET_NAME}!A1:${colLetter(COLS.length)}1`;
+    await sheetsUpdate(headerRange, [COLS]);
+
+    // Build a map of existing row positions by contact id
+    const headers = allRows[0];
+    const idCol = headers.indexOf('id');
+    const rowIndexById = {};
+    allRows.slice(1).forEach((row, i) => {
+      if (row[idCol]) rowIndexById[row[idCol]] = i + 2; // 1-indexed, +1 for header
+    });
+
+    // For each contact: update existing row or append new one
+    const toAppend = [];
+    for (const c of contacts) {
+      const rowNum = rowIndexById[c.id];
+      if (rowNum) {
+        const range = `${SHEET_NAME}!A${rowNum}:${colLetter(COLS.length)}${rowNum}`;
+        await sheetsUpdate(range, [contactToRow(c)]);
+      } else {
+        toAppend.push(contactToRow(c));
+      }
+    }
+    if (toAppend.length > 0) {
+      await sheetsAppend(toAppend);
     }
   } catch(e) {
     showStatus('Save failed — check connection', 4000);
     console.error(e);
     throw e;
   }
+}
+
+function colLetter(n) {
+  // Convert column number to letter (1=A, 18=R, 19=S etc)
+  let s = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
 // ─── COMPAT: saveContacts now saves to Sheets ─────────────────────────────────

@@ -499,6 +499,31 @@
   .select-mode .contact-card { cursor: default; }
   .select-mode .contact-card:hover { border-color: var(--border); box-shadow: none; }
 
+  .overdue-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--danger);
+    flex-shrink: 0;
+  }
+  .email-template {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 14px 14px 14px;
+    font-size: 12px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .copy-btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 14px;
+    font-size: 11px;
+  }
+  .copy-btn.copied { background: #3d8c6f !important; color: white !important; border-color: #3d8c6f !important; }
+
   .empty-list {
     text-align: center;
     padding: 48px 24px;
@@ -560,6 +585,17 @@
 <div class="app-body">
   <!-- SIDEBAR -->
   <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Follow-up</div>
+      <div class="sidebar-item" onclick="filterByFollowUp(this)">
+        <div class="sidebar-item-label">
+          <div class="sidebar-dot" style="background:var(--danger)"></div>
+          Needs Follow-up
+        </div>
+        <span class="sidebar-count" id="count-followup">0</span>
+      </div>
+    </div>
+
     <div class="sidebar-section">
       <div class="sidebar-label">Pipeline</div>
       <div class="sidebar-item active" onclick="filterByStage(null, this)" id="filter-all">
@@ -742,6 +778,7 @@
         </div>
         <div class="detail-actions">
           <button class="btn btn-secondary btn-sm" onclick="openEditModal()">Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="openFollowUpEmail()">✉ Follow-up</button>
           <button class="btn btn-danger btn-sm" onclick="deleteContact()">Delete</button>
         </div>
       </div>
@@ -755,6 +792,10 @@
           <div class="detail-field">
             <div class="detail-field-label">Phone</div>
             <div class="detail-field-value" id="dPhone">—</div>
+          </div>
+          <div class="detail-field" id="dTherapyStatusField" style="display:none">
+            <div class="detail-field-label">Therapy Status</div>
+            <div class="detail-field-value" id="dTherapyStatus">—</div>
           </div>
           <div class="detail-field">
             <div class="detail-field-label">Added</div>
@@ -813,7 +854,7 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Eval Type</label>
-          <select class="form-select" id="fEval">
+          <select class="form-select" id="fEval" onchange="toggleTherapyStatus()">
             <option value="faaadhd">FAA ADHD Fast Track</option>
             <option value="faa">FAA / HIMS</option>
             <option value="lsat">LSAT</option>
@@ -823,7 +864,19 @@
             <option value="other">Other</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="therapyStatusGroup" style="display:none">
+          <label class="form-label">Therapy Status</label>
+          <select class="form-select" id="fTherapyStatus">
+            <option value="">— Select —</option>
+            <option value="inquired">Inquired</option>
+            <option value="intake_scheduled">Intake Scheduled</option>
+            <option value="in_therapy">In Therapy</option>
+            <option value="on_hold">On Hold</option>
+            <option value="terminated">Terminated</option>
+            <option value="referred_out">Referred Out</option>
+          </select>
+        </div>
+        <div class="form-group" id="stageGroup">
           <label class="form-label">Stage</label>
           <select class="form-select" id="fStage">
             <option value="inquiry">Inquiry Made</option>
@@ -836,6 +889,7 @@
             <option value="reportcomplete">Report Completed</option>
             <option value="declined">Declined / Dropped</option>
           </select>
+        </div>
         </div>
       </div>
       <div class="form-row">
@@ -899,11 +953,12 @@ let contacts = [];
 let selectedId = null;
 let activeStageFilter = null;
 let activeEvalFilter = null;
+let activeFollowUpFilter = false;
 let editingId = null;
 let authToken = null;
 
 // ─── SHEET COLUMNS (must match your header row) ───────────────────────────────
-const COLS = ['id','firstName','lastName','email','phone','eval','stage','source','notes','dateAdded','consultDate','lastContacted','created','eventTitle','reason'];
+const COLS = ['id','firstName','lastName','email','phone','eval','stage','source','notes','dateAdded','consultDate','lastContacted','created','eventTitle','reason','therapyStatus'];
 
 function contactToRow(c) {
   return COLS.map(k => c[k] !== undefined && c[k] !== null ? String(c[k]) : '');
@@ -1086,6 +1141,20 @@ const EVAL_LABELS = {
   accommodations: 'Accommodations', therapy: 'Therapy', other: 'Other'
 };
 
+const THERAPY_STATUS_LABELS = {
+  inquired: 'Inquired', intake_scheduled: 'Intake Scheduled',
+  in_therapy: 'In Therapy', on_hold: 'On Hold',
+  terminated: 'Terminated', referred_out: 'Referred Out'
+};
+
+function isOverdue(c) {
+  // Needs follow-up if: eval completed or report completed, and no contact in 30 days
+  const followUpStages = ['evalcomplete', 'reportcomplete', 'eval', 'complete'];
+  if (!followUpStages.includes(c.stage)) return false;
+  const lastTouch = c.lastContacted || c.consultDate || c.dateAdded || c.created;
+  return !lastTouch || (Date.now() - lastTouch) > 30 * 86400000;
+}
+
 function initials(c) {
   return ((c.firstName||'')[0]||(c.lastName||'')[0]||'?').toUpperCase() +
          ((c.lastName||'')[0]||'').toUpperCase();
@@ -1119,7 +1188,8 @@ function renderList() {
       matchDate = fieldVal && fieldVal >= cutoff;
     }
 
-    return matchStage && matchEval && matchSearch && matchDate;
+    const matchFollowUp = !activeFollowUpFilter || isOverdue(c);
+    return matchStage && matchEval && matchSearch && matchDate && matchFollowUp;
   });
 
   if (sort === 'date-desc') filtered.sort((a,b) => b.created - a.created);
@@ -1144,7 +1214,10 @@ function renderList() {
       ${selectMode ? `<input type="checkbox" class="contact-checkbox" data-id="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} onchange="toggleContactCheck('${c.id}', this.checked)" onclick="event.stopPropagation()">` : ''}
       <div class="contact-avatar">${initials(c)}</div>
       <div class="contact-main">
-        <div class="contact-name">${c.firstName} ${c.lastName}</div>
+        <div class="contact-name" style="display:flex;align-items:center;gap:6px">
+          ${c.firstName} ${c.lastName}
+          ${isOverdue(c) ? '<span class="overdue-dot" title="Needs follow-up"></span>' : ''}
+        </div>
         <div class="contact-meta">
           <span class="tag stage-${c.stage}">${STAGE_LABELS[c.stage]||c.stage}</span>
           <span class="tag eval-${c.eval}">${EVAL_LABELS[c.eval]||c.eval}</span>
@@ -1174,6 +1247,7 @@ function formatDateLong(ts) {
 // ─── COUNTS ───────────────────────────────────────────────────────────────────
 function updateCounts() {
   document.getElementById('count-all').textContent = contacts.length;
+  document.getElementById('count-followup').textContent = contacts.filter(isOverdue).length;
   ['inquiry','intake','awaiting','evalscheduled','sp','deposit','evalcomplete','reportcomplete','declined'].forEach(s => {
     document.getElementById('count-'+s).textContent = contacts.filter(c=>c.stage===s).length;
   });
@@ -1183,9 +1257,19 @@ function updateCounts() {
 }
 
 // ─── FILTERS ──────────────────────────────────────────────────────────────────
+function filterByFollowUp(el) {
+  activeFollowUpFilter = true;
+  activeStageFilter = null;
+  activeEvalFilter = null;
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
 function filterByStage(stage, el) {
   activeStageFilter = stage;
   activeEvalFilter = null;
+  activeFollowUpFilter = false;
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
   renderList();
@@ -1194,6 +1278,7 @@ function filterByStage(stage, el) {
 function filterByEval(eval_, el) {
   activeEvalFilter = eval_;
   activeStageFilter = null;
+  activeFollowUpFilter = false;
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
   renderList();
@@ -1216,6 +1301,16 @@ function selectContact(id) {
      <span class="tag eval-${c.eval}">${EVAL_LABELS[c.eval]}</span>`;
   document.getElementById('dEmail').textContent = c.email || '—';
   document.getElementById('dPhone').textContent = c.phone || '—';
+
+  // Therapy status
+  const tsField = document.getElementById('dTherapyStatusField');
+  const tsVal = document.getElementById('dTherapyStatus');
+  if (c.eval === 'therapy') {
+    tsField.style.display = 'block';
+    tsVal.textContent = THERAPY_STATUS_LABELS[c.therapyStatus] || '—';
+  } else {
+    tsField.style.display = 'none';
+  }
   document.getElementById('dDate').textContent = formatDateLong(c.dateAdded||c.created);
   document.getElementById('dConsultDate').textContent = formatDateLong(c.consultDate);
   document.getElementById('dLastContacted').textContent = c.lastContacted ? formatDateLong(c.lastContacted) : '—';
@@ -1236,6 +1331,12 @@ function selectContact(id) {
 
 function closeDetail() {
   document.getElementById('detailPanel').classList.remove('mobile-show');
+}
+
+function toggleTherapyStatus() {
+  const isTherapy = document.getElementById('fEval').value === 'therapy';
+  document.getElementById('therapyStatusGroup').style.display = isTherapy ? 'block' : 'none';
+  document.getElementById('stageGroup').style.display = isTherapy ? 'none' : 'block';
 }
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
@@ -1262,6 +1363,8 @@ function openEditModal() {
   document.getElementById('fStage').value     = c.stage     || 'inquiry';
   document.getElementById('fSource').value    = c.source    || 'Google Calendar';
   document.getElementById('fNotes').value     = c.notes     || '';
+  document.getElementById('fTherapyStatus').value = c.therapyStatus || '';
+  toggleTherapyStatus();
   if (c.dateAdded) {
     document.getElementById('fDate').value = new Date(c.dateAdded).toISOString().split('T')[0];
   }
@@ -1276,9 +1379,11 @@ function clearForm() {
   ['fFirstName','fLastName','fEmail','fPhone','fNotes','fLastContacted','fConsultDate'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  document.getElementById('fEval').value   = 'other';
-  document.getElementById('fStage').value  = 'inquiry';
-  document.getElementById('fSource').value = 'Google Calendar';
+  document.getElementById('fEval').value          = 'other';
+  document.getElementById('fStage').value         = 'inquiry';
+  document.getElementById('fSource').value        = 'Google Calendar';
+  document.getElementById('fTherapyStatus').value = '';
+  toggleTherapyStatus();
 }
 
 function closeModal() {
@@ -1303,6 +1408,7 @@ function saveContact() {
   const dateVal = document.getElementById('fDate').value;
   const dateAdded = dateVal ? new Date(dateVal).getTime() : Date.now();
 
+  const therapyStatus = document.getElementById('fTherapyStatus').value || null;
   const lcVal = document.getElementById('fLastContacted').value;
   const csVal = document.getElementById('fConsultDate').value;
   const lastContacted = lcVal ? new Date(lcVal).getTime() : null;
@@ -1320,7 +1426,7 @@ function saveContact() {
         stage:   document.getElementById('fStage').value,
         source:  document.getElementById('fSource').value,
         notes:   document.getElementById('fNotes').value.trim(),
-        dateAdded, lastContacted, consultDate,
+        dateAdded, lastContacted, consultDate, therapyStatus,
       };
     }
   } else {
@@ -1333,7 +1439,7 @@ function saveContact() {
       stage:   document.getElementById('fStage').value,
       source:  document.getElementById('fSource').value,
       notes:   document.getElementById('fNotes').value.trim(),
-      dateAdded, lastContacted, consultDate,
+      dateAdded, lastContacted, consultDate, therapyStatus,
       created: Date.now(),
     });
   }
@@ -1477,15 +1583,14 @@ function extractContactsFromEvents(events) {
   const candidates = [];
 
   for (const ev of events) {
+    // Only process events booked through your appointment scheduling page
+    // These always contain your name + "(Client Name)" in the title
+    const titleMatch = (ev.summary || '').match(/consultation[^(]*\(([^)]+)\)/i);
+    if (!titleMatch) continue;
+
+    const nameFromTitle = titleMatch[1].trim();
     const attendees = (ev.attendees || []).filter(a => a.email && !a.self);
     if (!attendees.length) continue;
-
-    // Extract name from event title — format: "Title (First Last)"
-    let nameFromTitle = '';
-    const titleMatch = (ev.summary || '').match(/\(([^)]+)\)\s*$/);
-    if (titleMatch) nameFromTitle = titleMatch[1].trim();
-
-    // Extract phone from location field
     const phone = (ev.location || '').replace(/\D/g, '').slice(-10);
     const phoneFormatted = phone.length === 10
       ? `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`
@@ -1506,16 +1611,9 @@ function extractContactsFromEvents(events) {
       if (seen.has(email)) continue;
       seen.add(email);
 
-      // Name priority: title parentheses > attendee displayName > email prefix
-      let firstName = '', lastName = '';
-      const nameStr = nameFromTitle || att.displayName || '';
-      if (nameStr) {
-        const parts = nameStr.trim().split(' ');
-        firstName = parts[0] || '';
-        lastName = parts.slice(1).join(' ') || '';
-      } else {
-        firstName = att.email.split('@')[0];
-      }
+      const parts = nameFromTitle.split(' ');
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ') || '';
 
       candidates.push({
         firstName, lastName,
@@ -1656,6 +1754,119 @@ function importSelected(candidates) {
     document.body.appendChild(msg);
     setTimeout(() => msg.remove(), 3000);
   }
+}
+
+// ─── FOLLOW-UP EMAIL ──────────────────────────────────────────────────────────
+function openFollowUpEmail() {
+  const c = contacts.find(x => x.id === selectedId);
+  if (!c) return;
+
+  const firstName = c.firstName || 'there';
+  const isFaaAdhd = c.eval === 'faaadhd';
+  const isFaa = c.eval === 'faa';
+  const isAccom = ['lsat','mcat','accommodations'].includes(c.eval);
+
+  let subject = '', body = '';
+
+  if (isFaaAdhd) {
+    subject = `Checking in — FAA ADHD Fast Track evaluation`;
+    body = `Hi ${firstName},
+
+I wanted to reach out and see how things went with your FAA ADHD Fast Track evaluation process. It's been a little while and I realized I hadn't heard back from you.
+
+If you've received a decision — whether things went through or there were any issues — I'd genuinely like to know. And if there's anything I can help clarify or support from my end, don't hesitate to reach out.
+
+Wishing you the best,
+
+Dr. Jason Olin, PhD
+Licensed Psychologist | HIMS-Certified Neuropsychologist
+jasonolinphd.com`;
+  } else if (isFaa) {
+    subject = `Checking in — FAA medical evaluation`;
+    body = `Hi ${firstName},
+
+I wanted to follow up and see how your FAA medical process has been going. I realize some time has passed since we last connected and I hadn't heard an update.
+
+If you've received a decision from the FAA or your AME, I'd be glad to hear how it turned out. And if anything came up that I can help with — whether that's additional documentation or clarification — feel free to reach out.
+
+Best,
+
+Dr. Jason Olin, PhD
+Licensed Psychologist | HIMS-Certified Neuropsychologist
+jasonolinphd.com`;
+  } else if (isAccom) {
+    subject = `Checking in — testing accommodations`;
+    body = `Hi ${firstName},
+
+I wanted to check in and see how your accommodations request went. It's been a little while and I realized I hadn't heard back from you.
+
+Whether you received a decision or are still waiting to hear, I'd genuinely like to know how things are going. If there's anything on my end that would be helpful — additional documentation, a letter of support, or just a question — please don't hesitate to reach out.
+
+Wishing you well,
+
+Dr. Jason Olin, PhD
+Licensed Psychologist | Neuropsychological Evaluations
+jasonolinphd.com`;
+  } else {
+    subject = `Checking in`;
+    body = `Hi ${firstName},
+
+I wanted to reach out and see how things have been going since we last connected. I realized some time had passed and I hadn't heard back from you.
+
+If there's anything I can help with or if you have any questions, feel free to reach out anytime.
+
+Best,
+
+Dr. Jason Olin, PhD
+Licensed Psychologist
+jasonolinphd.com`;
+  }
+
+  const existing = document.getElementById('emailModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'emailModal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:300';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        Follow-up Email — ${firstName}
+        <button class="modal-close" onclick="document.getElementById('emailModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:14px">
+          <div class="detail-field-label" style="margin-bottom:4px">Subject</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="email-template" style="margin:0;flex:1;padding:8px 12px">${subject}</div>
+            <button class="btn btn-secondary btn-sm copy-btn" style="position:static;width:auto;margin:0" onclick="copyText('${subject.replace(/'/g,"\\'")}', this)">Copy</button>
+          </div>
+        </div>
+        <div>
+          <div class="detail-field-label" style="margin-bottom:4px">Body</div>
+          <div class="email-template" id="emailBody">${body}</div>
+          <button class="btn btn-secondary copy-btn" onclick="copyText(document.getElementById('emailBody').textContent, this)">Copy Email Body</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.6">
+          Tip: After sending, go to Edit on this contact and update the Last Contacted date.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('emailModal').remove()">Close</button>
+        ${c.email ? '<a href="mailto:' + c.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body) + '" class="btn btn-primary" style="text-decoration:none">Open in Mail</a>' : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+  });
 }
 
 // ─── BULK SELECT ──────────────────────────────────────────────────────────────

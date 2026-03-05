@@ -1381,6 +1381,7 @@ function selectContact(id) {
   const outcomeLabels = { approved:'Approved', denied:'Denied', appealing:'Appealing', withdrawn:'Withdrawn', unknown:'Unknown' };
   document.getElementById('dOutcome').textContent = outcomeLabels[c.outcome] || '—';
   document.getElementById('dOutcomeNotes').textContent = c.outcomeNotes || '—';
+  const tsField = document.getElementById('dTherapyStatusField');
   const tsVal = document.getElementById('dTherapyStatus');
   if (c.eval === 'therapy') {
     tsField.style.display = 'block';

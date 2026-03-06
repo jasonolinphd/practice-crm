@@ -1571,7 +1571,7 @@ function renderList() {
           ${isOverdue(c) ? '<span class="overdue-dot" title="Needs follow-up"></span>' : ''}
         </div>
         <div class="contact-meta">
-          <span class="tag stage-${c.stage}">${STAGE_LABELS[c.stage]||c.stage}</span>
+          <span class="tag stage-${c.stage}">${c.eval==='therapy'&&c.therapyStatus ? (THERAPY_STATUS_LABELS[c.therapyStatus]||c.therapyStatus) : (STAGE_LABELS[c.stage]||c.stage)}</span>
           <span class="tag eval-${c.eval}">${EVAL_LABELS[c.eval]||c.eval}</span>
         </div>
       </div>
@@ -1659,7 +1659,7 @@ function selectContact(id) {
   document.getElementById('dAvatar').textContent = initials(c);
   document.getElementById('dName').textContent = `${c.firstName} ${c.lastName}`;
   document.getElementById('dTags').innerHTML =
-    `<span class="tag stage-${c.stage}">${STAGE_LABELS[c.stage]}</span>
+    `<span class="tag stage-${c.stage}">${c.eval==='therapy'&&c.therapyStatus ? (THERAPY_STATUS_LABELS[c.therapyStatus]||c.therapyStatus) : (STAGE_LABELS[c.stage]||c.stage)}</span>
      <span class="tag eval-${c.eval}">${EVAL_LABELS[c.eval]}</span>`;
   document.getElementById('dEmail').textContent = c.email || '—';
   document.getElementById('dPhone').textContent = c.phone || '—';

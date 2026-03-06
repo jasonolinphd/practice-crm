@@ -1147,6 +1147,9 @@
             <option value="referred_out">Referred Out</option>
           </select>
         </div>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group" id="stageGroup">
           <label class="form-label">Stage</label>
           <select class="form-select" id="fStage">
@@ -1160,7 +1163,6 @@
             <option value="reportcomplete">Report Completed</option>
             <option value="declined">Declined / Dropped</option>
           </select>
-        </div>
         </div>
       </div>
       <div class="form-row" id="outcomeGroup" style="display:none">
@@ -1374,30 +1376,39 @@ async function loadFromSheets() {
 async function saveToSheets() {
   setSaveStatus('saving');
   try {
-    const range = `${SHEET_NAME}!A1:${colLetter(COLS.length)}`;
-    // Write header + all data in one batchUpdate call (atomic — no partial save risk)
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          valueInputOption: 'RAW',
-          data: [{ range, values: [COLS, ...contacts.map(contactToRow)] }],
-          includeValuesInResponse: false
-        })
-      }
-    );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(`Sheets batchUpdate failed: ${res.status} ${JSON.stringify(err)}`);
-    }
+    await _doSave(false);
     setSaveStatus('saved');
   } catch(e) {
     setSaveStatus('error');
-    showStatus('Save failed — check connection', 4000);
+    showStatus('Save failed — ' + e.message, 5000);
     console.error(e);
     throw e;
+  }
+}
+
+async function _doSave(retried) {
+  const range = `${SHEET_NAME}!A1:${colLetter(COLS.length)}`;
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        valueInputOption: 'RAW',
+        data: [{ range, values: [COLS, ...contacts.map(contactToRow)] }],
+        includeValuesInResponse: false
+      })
+    }
+  );
+  if (res.status === 401 && !retried) {
+    localStorage.removeItem('gtoken');
+    authToken = null;
+    await new Promise(resolve => requireAuth(() => resolve()));
+    return _doSave(true);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`${res.status}: ${err?.error?.message || JSON.stringify(err)}`);
   }
 }
 
@@ -1695,7 +1706,7 @@ function toggleTherapyStatus() {
   const isTherapy = eval_ === 'therapy';
   const hasOutcome = ['faaadhd','faa','lsat','mcat','accommodations'].includes(eval_);
   document.getElementById('therapyStatusGroup').style.display = isTherapy ? 'block' : 'none';
-  document.getElementById('stageGroup').style.display = isTherapy ? 'none' : 'block';
+  document.getElementById('stageGroup').style.display = 'block';
   document.getElementById('outcomeGroup').style.display = hasOutcome ? 'flex' : 'none';
 }
 

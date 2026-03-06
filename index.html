@@ -539,22 +539,7 @@
     padding: 8px 20px 2px;
   }
 
-  /* Responsive */
-  @media (max-width: 768px) {
-    .sidebar { display: none; }
-    .detail-panel { display: none; }
-    .detail-panel.mobile-show {
-      display: flex;
-      position: fixed;
-      inset: 56px 0 0 0;
-      width: 100%;
-      z-index: 50;
-    }
-    .mobile-back {
-      display: flex;
-    }
-  }
-
+  /* MOBILE BACK */
   .mobile-back {
     display: none;
     align-items: center;
@@ -565,6 +550,181 @@
     cursor: pointer;
     font-size: 12px;
     color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* MOBILE BOTTOM NAV */
+  .mobile-nav {
+    display: none;
+  }
+
+  /* MOBILE FILTER DRAWER */
+  .mobile-filter-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+  }
+  .mobile-filter-overlay.open { display: block; }
+  .mobile-filter-drawer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 16px 16px 0 0;
+    padding: 20px 0 32px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .mobile-filter-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+  .mobile-filter-title {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 20px 8px;
+    font-weight: 500;
+  }
+  .mobile-filter-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid var(--surface2);
+  }
+  .mobile-filter-item:active { background: var(--surface2); }
+  .mobile-filter-item.active { color: var(--accent); font-weight: 500; }
+  .mobile-filter-item-left { display: flex; align-items: center; gap: 10px; }
+  .mobile-filter-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .mobile-filter-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--surface2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 28px;
+    text-align: center;
+  }
+  .mobile-filter-item.active .mobile-filter-count { background: var(--accent-light); color: var(--accent); }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    body { font-size: 14px; }
+
+    /* Header: compact, just title + new contact */
+    .header {
+      padding: 0 16px;
+      height: 52px;
+    }
+    .header-title { font-size: 17px; }
+    .header-actions .btn-ghost { display: none; }
+    .header-actions .btn-primary {
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+
+    /* Layout */
+    .app-body { height: calc(100vh - 52px - 56px); }
+    .sidebar { display: none; }
+
+    /* Toolbar: search + filter button only */
+    .toolbar {
+      padding: 10px 14px;
+      gap: 8px;
+      flex-wrap: nowrap;
+    }
+    .toolbar select { display: none; }
+    .toolbar #selectModeBtn { display: none; }
+    .toolbar-filter-btn {
+      display: flex !important;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Contact cards: bigger tap targets */
+    .contact-card {
+      padding: 14px 16px;
+    }
+    .contact-name { font-size: 15px; }
+    .contact-date { font-size: 12px; }
+    .tag { font-size: 11px; padding: 3px 8px; }
+
+    /* Detail panel: full screen slide-in */
+    .detail-panel { display: none; }
+    .detail-panel.mobile-show {
+      display: flex;
+      position: fixed;
+      inset: 52px 0 56px 0;
+      width: 100%;
+      z-index: 150;
+      overflow-y: auto;
+    }
+    .mobile-back { display: flex; }
+
+    /* Detail: larger text */
+    .detail-name { font-size: 20px; }
+    .detail-field-label { font-size: 11px; }
+    .detail-field-value { font-size: 14px; }
+    .detail-body { padding: 0 16px 32px; }
+    .detail-actions { gap: 8px; flex-wrap: wrap; }
+    .detail-actions .btn { flex: 1; min-width: 80px; text-align: center; padding: 9px 8px; font-size: 12px; }
+
+    /* Result count */
+    .result-count { padding: 8px 14px 2px; }
+
+    /* Bottom nav */
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 56px;
+      background: var(--text);
+      z-index: 100;
+      align-items: stretch;
+    }
+    .mobile-nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      color: rgba(255,255,255,0.55);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: 'DM Mono', monospace;
+      transition: color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-nav-btn:active, .mobile-nav-btn.active { color: rgba(255,255,255,0.95); }
+    .mobile-nav-icon { font-size: 18px; line-height: 1; }
+
+    /* Modal full-screen on mobile */
+    .modal {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0;
+      border-radius: 16px 16px 0 0;
+      max-height: 92vh;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+    }
+    .modal-overlay { align-items: flex-end; }
+    .form-row { flex-direction: column; gap: 0; }
   }
 </style>
 </head>
@@ -577,6 +737,7 @@
   <div class="header-actions">
     <button class="btn btn-ghost btn-sm" onclick="exportData()">↓ Export</button>
     <button class="btn btn-ghost btn-sm" id="migrateBtn" onclick="migrateLocalToSheets()" title="One-time: push local contacts to Google Sheets">↑ Migrate to Sheets</button>
+    <button class="btn btn-ghost btn-sm" id="manualSaveBtn" onclick="saveToSheets()">↑ Save to Sheet</button>
     <button class="btn btn-ghost btn-sm" id="gcalBtn" onclick="startGCalSync()">⟳ Sync Calendar</button>
     <button class="btn btn-ghost btn-sm" id="wixBtn" onclick="startWixSync()">⟳ Sync Wix</button>
     <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ New Contact</button>
@@ -748,6 +909,7 @@
         <option value="date-asc">Oldest first</option>
         <option value="name">Name A–Z</option>
       </select>
+      <button class="btn btn-secondary btn-sm toolbar-filter-btn" style="display:none" onclick="openMobileFilter()">⊟ Filter</button>
       <button class="btn btn-secondary btn-sm" id="selectModeBtn" onclick="toggleSelectMode()">Select</button>
     </div>
 
@@ -832,7 +994,107 @@
   </div>
 </div>
 
-<!-- ADD/EDIT MODAL -->
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav">
+  <button class="mobile-nav-btn" onclick="mobileSave()">
+    <span class="mobile-nav-icon">↑</span>
+    Save
+  </button>
+  <button class="mobile-nav-btn" onclick="mobileSync()">
+    <span class="mobile-nav-icon">⟳</span>
+    Sync
+  </button>
+  <button class="mobile-nav-btn" onclick="openMobileFilter()">
+    <span class="mobile-nav-icon">⊟</span>
+    Filter
+  </button>
+  <button class="mobile-nav-btn" onclick="openAddModal()">
+    <span class="mobile-nav-icon">＋</span>
+    New
+  </button>
+</nav>
+
+<!-- MOBILE FILTER DRAWER -->
+<div class="mobile-filter-overlay" id="mobileFilterOverlay" onclick="if(event.target===this)closeMobileFilter()">
+  <div class="mobile-filter-drawer">
+    <div class="mobile-filter-handle"></div>
+    <div class="mobile-filter-title">Pipeline</div>
+    <div class="mobile-filter-item" onclick="filterByStage(null,null);closeMobileFilter()" id="mf-all">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:#aaa"></div>All Contacts</div>
+      <span class="mobile-filter-count" id="mcount-all">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('inquiry',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-inquiry)"></div>Inquiry Made</div>
+      <span class="mobile-filter-count" id="mcount-inquiry">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('intake',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-intake)"></div>Intake Scheduled</div>
+      <span class="mobile-filter-count" id="mcount-intake">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('awaiting',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-awaiting)"></div>Awaiting Decision</div>
+      <span class="mobile-filter-count" id="mcount-awaiting">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('evalscheduled',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-evalscheduled)"></div>Eval Scheduled</div>
+      <span class="mobile-filter-count" id="mcount-evalscheduled">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('sp',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-sp)"></div>SimplePractice Done</div>
+      <span class="mobile-filter-count" id="mcount-sp">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('deposit',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-deposit)"></div>Deposit Charged</div>
+      <span class="mobile-filter-count" id="mcount-deposit">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('evalcomplete',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-evalcomplete)"></div>Eval Completed</div>
+      <span class="mobile-filter-count" id="mcount-evalcomplete">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('reportcomplete',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-reportcomplete)"></div>Report Completed</div>
+      <span class="mobile-filter-count" id="mcount-reportcomplete">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByStage('declined',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--stage-declined)"></div>Declined / Dropped</div>
+      <span class="mobile-filter-count" id="mcount-declined">0</span>
+    </div>
+    <div class="mobile-filter-title" style="padding-top:12px">Eval Type</div>
+    <div class="mobile-filter-item" onclick="filterByEval('faaadhd',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-faaadhd)"></div>FAA ADHD Fast Track</div>
+      <span class="mobile-filter-count" id="mcount-faaadhd">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('faa',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-faa)"></div>FAA / HIMS</div>
+      <span class="mobile-filter-count" id="mcount-faa">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('lsat',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-lsat)"></div>LSAT</div>
+      <span class="mobile-filter-count" id="mcount-lsat">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('mcat',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-mcat)"></div>MCAT</div>
+      <span class="mobile-filter-count" id="mcount-mcat">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('accommodations',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-accommodations)"></div>Accommodations</div>
+      <span class="mobile-filter-count" id="mcount-accommodations">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('therapy',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-therapy)"></div>Therapy</div>
+      <span class="mobile-filter-count" id="mcount-therapy">0</span>
+    </div>
+    <div class="mobile-filter-item" onclick="filterByEval('other',null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--eval-other)"></div>Other</div>
+      <span class="mobile-filter-count" id="mcount-other">0</span>
+    </div>
+    <div class="mobile-filter-title" style="padding-top:12px">Follow-up</div>
+    <div class="mobile-filter-item" onclick="filterByFollowUp(null);closeMobileFilter()">
+      <div class="mobile-filter-item-left"><div class="mobile-filter-dot" style="background:var(--danger)"></div>Needs Follow-up</div>
+      <span class="mobile-filter-count" id="mcount-followup">0</span>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modalOverlay" style="display:none" onclick="closeModalOnOverlay(event)">
   <div class="modal">
     <div class="modal-header">
@@ -1110,14 +1372,54 @@ async function loadFromSheets() {
 
 // ─── SAVE ALL TO SHEETS (full rewrite) ────────────────────────────────────────
 async function saveToSheets() {
+  setSaveStatus('saving');
   try {
     const range = `${SHEET_NAME}!A1:${colLetter(COLS.length)}`;
-    await sheetsClear(range);
-    await sheetsAppend([COLS, ...contacts.map(contactToRow)]);
+    // Write header + all data in one batchUpdate call (atomic — no partial save risk)
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          valueInputOption: 'RAW',
+          data: [{ range, values: [COLS, ...contacts.map(contactToRow)] }],
+          includeValuesInResponse: false
+        })
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Sheets batchUpdate failed: ${res.status} ${JSON.stringify(err)}`);
+    }
+    setSaveStatus('saved');
   } catch(e) {
+    setSaveStatus('error');
     showStatus('Save failed — check connection', 4000);
     console.error(e);
     throw e;
+  }
+}
+
+let _saveStatusTimer = null;
+function setSaveStatus(state) {
+  const btn = document.getElementById('manualSaveBtn');
+  if (!btn) return;
+  clearTimeout(_saveStatusTimer);
+  if (state === 'saving') {
+    btn.textContent = '↑ Saving…';
+    btn.disabled = true;
+    btn.style.color = 'var(--text-muted)';
+  } else if (state === 'saved') {
+    btn.textContent = '✓ Saved';
+    btn.disabled = false;
+    btn.style.color = 'var(--accent)';
+    _saveStatusTimer = setTimeout(() => { btn.textContent = '↑ Save to Sheet'; btn.style.color = ''; }, 3000);
+  } else if (state === 'error') {
+    btn.textContent = '⚠ Save Failed';
+    btn.disabled = false;
+    btn.style.color = 'var(--danger)';
+    _saveStatusTimer = setTimeout(() => { btn.textContent = '↑ Save to Sheet'; btn.style.color = ''; }, 5000);
   }
 }
 
@@ -1293,6 +1595,15 @@ function updateCounts() {
   ['faaadhd','faa','lsat','mcat','accommodations','therapy','other'].forEach(e => {
     document.getElementById('count-'+e).textContent = contacts.filter(c=>c.eval===e).length;
   });
+  // Sync mobile drawer counts
+  const mAll = document.getElementById('mcount-all'); if(mAll) mAll.textContent = contacts.length;
+  const mFu = document.getElementById('mcount-followup'); if(mFu) mFu.textContent = contacts.filter(isOverdue).length;
+  ['inquiry','intake','awaiting','evalscheduled','sp','deposit','evalcomplete','reportcomplete','declined'].forEach(s => {
+    const el = document.getElementById('mcount-'+s); if(el) el.textContent = contacts.filter(c=>c.stage===s).length;
+  });
+  ['faaadhd','faa','lsat','mcat','accommodations','therapy','other'].forEach(e => {
+    const el = document.getElementById('mcount-'+e); if(el) el.textContent = contacts.filter(c=>c.eval===e).length;
+  });
 }
 
 // ─── FILTERS ──────────────────────────────────────────────────────────────────
@@ -1301,7 +1612,7 @@ function filterByFollowUp(el) {
   activeStageFilter = null;
   activeEvalFilter = null;
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
+  if(el) el.classList.add('active');
   renderList();
 }
 
@@ -1310,7 +1621,8 @@ function filterByStage(stage, el) {
   activeEvalFilter = null;
   activeFollowUpFilter = false;
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
+  if(el) el.classList.add('active');
+  else if(stage===null) { const a=document.getElementById('filter-all'); if(a) a.classList.add('active'); }
   renderList();
 }
 
@@ -1319,7 +1631,7 @@ function filterByEval(eval_, el) {
   activeStageFilter = null;
   activeFollowUpFilter = false;
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
+  if(el) el.classList.add('active');
   renderList();
 }
 
@@ -2286,6 +2598,20 @@ if (_existingToken) {
 function showSignInPrompt() {
   const el = document.getElementById('signInPrompt');
   if (el) el.style.display = 'flex';
+}
+
+// Mobile filter drawer
+function openMobileFilter() {
+  document.getElementById('mobileFilterOverlay').classList.add('open');
+}
+function closeMobileFilter() {
+  document.getElementById('mobileFilterOverlay').classList.remove('open');
+}
+function mobileSave() {
+  saveToSheets();
+}
+function mobileSync() {
+  startGCalSync();
 }
 </script>
 </body>

@@ -1979,8 +1979,10 @@ async function fetchCalendarEvents() {
       return;
     }
     const data = await res.json();
-    const candidates = extractContactsFromEvents(data.items || []);
-    showSyncModal(candidates);
+    const allEvents = data.items || [];
+    // If calendar returns 0 total events in a 120-day window, likely a stale token
+    const candidates = extractContactsFromEvents(allEvents);
+    showSyncModal(candidates, null, allEvents.length === 0);
   } catch(e) {
     showSyncModal([], 'fetch_error');
   } finally {
@@ -2043,7 +2045,7 @@ function extractContactsFromEvents(events) {
 }
 
 // ─── SYNC MODAL ───────────────────────────────────────────────────────────────
-function showSyncModal(candidates, errorType) {
+function showSyncModal(candidates, errorType, likelyStaleToken = false) {
   // Remove existing sync modal if any
   const existing = document.getElementById('syncModal');
   if (existing) existing.remove();
@@ -2074,10 +2076,17 @@ function showSyncModal(candidates, errorType) {
   }
 
   if (!candidates.length) {
+    const msg = likelyStaleToken
+      ? `Your Google Calendar session may have expired — no events were returned for the past 90 days, which is unusual. Try re-authenticating.`
+      : `No new contacts found in your calendar events from the past 90 days.<br><br>New bookings will appear here after someone schedules with you.`;
+    const footer = likelyStaleToken
+      ? `<button class="btn btn-primary" onclick="document.getElementById('syncModal').remove();localStorage.removeItem('gcal_token');gcalToken=null;startGCalSync()">Re-authenticate</button>
+         <button class="btn btn-secondary" onclick="document.getElementById('syncModal').remove()">Close</button>`
+      : `<button class="btn btn-secondary" onclick="document.getElementById('syncModal').remove()">Close</button>`;
     modal.innerHTML = `<div class="modal" style="max-width:400px">
       <div class="modal-header">Calendar Sync <button class="modal-close" onclick="document.getElementById('syncModal').remove()">✕</button></div>
-      <div class="modal-body"><p style="color:var(--text-muted);line-height:1.7">No new contacts found in your calendar events from the past 90 days.<br><br>New bookings will appear here after someone schedules with you.</p></div>
-      <div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('syncModal').remove()">Close</button></div>
+      <div class="modal-body"><p style="color:var(--text-muted);line-height:1.7">${msg}</p></div>
+      <div class="modal-footer">${footer}</div>
     </div>`;
     document.body.appendChild(modal);
     return;

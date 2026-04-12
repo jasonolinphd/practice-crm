@@ -1962,7 +1962,7 @@ async function fetchCalendarEvents() {
         timeMin, timeMax,
         singleEvents: 'true',
         orderBy: 'startTime',
-        maxResults: '250',
+        maxResults: '500',
       });
 
     const res = await fetch(url, {

@@ -1395,13 +1395,38 @@ async function loadFromSheets() {
     const data = await sheetsGet(`${SHEET_NAME}!A1:S`);
     const allRows = data.values || [];
     if (!allRows.length) { contacts = []; renderList(); updateCounts(); return; }
-    const headers = allRows[0];
-    const rows = allRows.slice(1);
+    // Detect whether row 1 is a real header row or data.
+    // A header row will contain at least 3 of our known column names.
+    const firstRow = allRows[0];
+    const headerHits = COLS.filter(k => firstRow.includes(k)).length;
+    let headers, rows;
+    if (headerHits >= 3) {
+      headers = firstRow;
+      rows = allRows.slice(1);
+    } else {
+      // No header row found — use COLS directly and treat all rows as data.
+      headers = COLS;
+      rows = allRows;
+      console.warn('CRM: header row missing from sheet — using built-in COLS. Consider adding a header row.');
+    }
     contacts = rows.filter(r => r[0]).map(r => rowToContact(r, headers));
+    // Cache to localStorage as backup
+    try { localStorage.setItem('practicecrm_contacts', JSON.stringify(contacts)); } catch(e) {}
     renderList();
     updateCounts();
     showStatus(`${contacts.length} contacts loaded`, 2000);
   } catch(e) {
+    // If Sheets fetch fails, try localStorage fallback
+    try {
+      const cached = JSON.parse(localStorage.getItem('practicecrm_contacts') || '[]');
+      if (cached.length) {
+        contacts = cached;
+        renderList();
+        updateCounts();
+        showStatus(`Loaded ${cached.length} cached contacts (offline)`, 4000);
+        return;
+      }
+    } catch(e2) {}
     showStatus('Failed to load — check connection', 4000);
     console.error(e);
   }
@@ -2614,8 +2639,8 @@ async function migrateLocalToSheets() {
   requireAuth(async () => {
     showStatus('Migrating…');
     try {
-      await sheetsClear(`${SHEET_NAME}!A2:O`);
-      await sheetsAppend(localContacts.map(contactToRow));
+      await sheetsClear(`${SHEET_NAME}!A1:${colLetter(COLS.length)}`);
+      await sheetsUpdate(`${SHEET_NAME}!A1:${colLetter(COLS.length)}`, [COLS, ...localContacts.map(contactToRow)]);
       contacts = localContacts;
       showStatus(`✓ ${localContacts.length} contacts migrated to Google Sheets`, 4000);
       renderList();
@@ -2645,8 +2670,22 @@ updateCounts();
 const _existingToken = getToken();
 if (_existingToken) {
   authToken = _existingToken;
-  loadFromSheets();
+  loadFromSheets().catch(() => {
+    // Token may be invalid even if not expired — show sign-in prompt
+    localStorage.removeItem('gtoken');
+    authToken = null;
+    showSignInPrompt();
+  });
 } else {
+  // Try loading from localStorage cache while showing sign-in prompt
+  try {
+    const cached = JSON.parse(localStorage.getItem('practicecrm_contacts') || '[]');
+    if (cached.length) {
+      contacts = cached;
+      renderList();
+      updateCounts();
+    }
+  } catch(e) {}
   showSignInPrompt();
 }
 
